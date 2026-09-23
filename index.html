@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#070b16">
+<title>Onur TV Mikrofon</title>
+<style>
+  :root { --bg: #070b16; --text: #eef1f7; --muted: #8b93a7; --accent: #ffb03b; --pink: #ff4d6d; --green: #34d399; --line: rgba(140,170,255,0.14); }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body { background: radial-gradient(600px 500px at 50% 30%, #13224a 0%, var(--bg) 70%); color: var(--text);
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; display: flex; flex-direction: column; align-items: center;
+    padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); user-select: none; -webkit-user-select: none; }
+  header { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  header svg { width: 44px; height: 44px; }
+  header .ad { font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
+  header .ad span { background: linear-gradient(90deg, var(--accent), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #durum { margin-top: 14px; font-size: 16px; color: var(--muted); text-align: center; min-height: 22px; }
+  #durum.ok { color: var(--green); }
+  #durum.hata { color: var(--pink); }
+
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; }
+  #tus { position: relative; width: 220px; height: 220px; border-radius: 50%; border: 0; outline: none;
+    background: linear-gradient(135deg, var(--accent), var(--pink)); box-shadow: 0 20px 60px rgba(255,77,109,.35);
+    display: flex; align-items: center; justify-content: center; transition: transform .15s ease, filter .3s ease; }
+  #tus:active { transform: scale(.96); }
+  #tus svg { width: 88px; height: 88px; }
+  #tus.kapali { filter: grayscale(1) brightness(.6); }
+  #halka { position: absolute; inset: -18px; border-radius: 50%; border: 3px solid rgba(255,176,59,.6); transform: scale(1); opacity: 0; transition: transform .08s linear, opacity .2s; pointer-events: none; }
+  #yazi { margin-top: 28px; font-size: 20px; font-weight: 600; text-align: center; }
+  #alt { margin-top: 8px; font-size: 14px; color: var(--muted); text-align: center; max-width: 300px; line-height: 1.4; }
+
+  #ayarlar { width: 100%; max-width: 380px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .ayar { background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 18px; padding: 16px; color: var(--text);
+    font: inherit; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .ayar.acik { background: rgba(255,176,59,.16); border-color: var(--accent); }
+  .ayar:disabled { opacity: .4; }
+  #uyari { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; max-width: 340px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 100 100" aria-hidden="true">
+    <defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb03b"/><stop offset="1" stop-color="#ff4d6d"/></linearGradient></defs>
+    <path d="M36 14 L50 27 L64 14" fill="none" stroke="url(#t)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="8" y="27" width="84" height="58" rx="14" fill="url(#t)"/><rect x="15" y="34" width="70" height="44" rx="8" fill="#0b1022"/>
+    <path d="M50 70 C 38 61, 33 55, 33 49 C 33 44, 37 41, 41 41 C 45 41, 48 43, 50 46 C 52 43, 55 41, 59 41 C 63 41, 67 44, 67 49 C 67 55, 62 61, 50 70 Z" fill="#ff4d6d"/>
+  </svg>
+  <div class="ad">Onur <span>TV</span> Mikrofon</div>
+</header>
+<div id="durum">Hazır</div>
+
+<main>
+  <button id="tus" aria-label="Mikrofon">
+    <div id="halka"></div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3" fill="#fff"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="17" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>
+    </svg>
+  </button>
+  <div id="yazi">Başlamak için dokun</div>
+  <div id="alt">Sesin televizyondan çıkacak.</div>
+</main>
+
+<div id="ayarlar">
+  <button class="ayar" id="sustur" disabled>🔇 Sustur</button>
+  <button class="ayar" id="eko" disabled>🎶 Eko</button>
+</div>
+<div id="uyari">Uğultu olursa telefonu hoparlörden biraz uzaklaştır ya da TV'nin sesini kıs.</div>
+
+<script src="peerjs.min.js"></script>
+<script>
+var tvId = decodeURIComponent(location.hash.slice(1));
+var $ = function (s) { return document.querySelector(s); };
+var peer = null, call = null, ham = null, ctx = null, analiz = null, gecik = null, ekoKazanc = null, cikis = null;
+var calisiyor = false, susuk = false, ekoAcik = false, uyanik = null;
+
+function durum(t, cls) { var d = $("#durum"); d.textContent = t; d.className = cls || ""; }
+if (!tvId) durum("Bu sayfayı TV'deki QR kodu okutarak aç.", "hata");
+
+$("#tus").addEventListener("click", function () {
+  if (!tvId) return;
+  if (!calisiyor) basla(); else if (call) { susturDegis(); }
+});
+$("#sustur").addEventListener("click", susturDegis);
+$("#eko").addEventListener("click", function () {
+  ekoAcik = !ekoAcik;
+  this.classList.toggle("acik", ekoAcik);
+  if (ekoKazanc) ekoKazanc.gain.setTargetAtTime(ekoAcik ? 0.35 : 0, ctx.currentTime, 0.05);
+});
+
+function susturDegis() {
+  if (!ham) return;
+  susuk = !susuk;
+  ham.getAudioTracks().forEach(function (t) { t.enabled = !susuk; });
+  $("#sustur").classList.toggle("acik", susuk);
+  $("#sustur").textContent = susuk ? "🎤 Aç" : "🔇 Sustur";
+  $("#tus").classList.toggle("kapali", susuk);
+  $("#yazi").textContent = susuk ? "Susturuldu" : "Konuşabilirsin";
+}
+
+function basla() {
+  calisiyor = true;
+  durum("Mikrofon izni isteniyor…");
+  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false })
+    .then(function (s) {
+      ham = s;
+      // Ses işleme zinciri: mikrofon → (kuru + isteğe bağlı eko) → TV'ye giden akış
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var kaynak = ctx.createMediaStreamSource(s);
+      cikis = ctx.createMediaStreamDestination();
+      analiz = ctx.createAnalyser(); analiz.fftSize = 512;
+      gecik = ctx.createDelay(1.0); gecik.delayTime.value = 0.22;
+      var geriBesleme = ctx.createGain(); geriBesleme.gain.value = 0.35;
+      ekoKazanc = ctx.createGain(); ekoKazanc.gain.value = 0;
+      kaynak.connect(cikis); kaynak.connect(analiz);
+      kaynak.connect(gecik); gecik.connect(geriBesleme); geriBesleme.connect(gecik);
+      gecik.connect(ekoKazanc); ekoKazanc.connect(cikis);
+      seviyeCiz();
+      ekranUyanik();
+      baglan();
+    })
+    .catch(function (e) {
+      calisiyor = false;
+      durum("Mikrofon izni verilmedi. Ayarlar → Safari → Mikrofon'dan izin ver.", "hata");
+    });
+}
+
+function baglan() {
+  durum("TV'ye bağlanılıyor…");
+  peer = new Peer();
+  peer.on("open", function () {
+    call = peer.call(tvId, cikis.stream);
+    var zaman = setTimeout(function () { if (!bagli) durum("TV bulunamadı. TV'de mikrofon ekranının açık olduğundan emin ol.", "hata"); }, 12000);
+    var bagli = false;
+    call.on("stream", function () {});
+    call.peerConnection && (call.peerConnection.oniceconnectionstatechange = function () {
+      var st = call.peerConnection.iceConnectionState;
+      if (st === "connected" || st === "completed") {
+        bagli = true; clearTimeout(zaman);
+        durum("Bağlandı · sesin TV'den çıkıyor", "ok");
+        $("#yazi").textContent = "Konuşabilirsin";
+        $("#alt").textContent = "Susturmak için butona dokun.";
+        $("#sustur").disabled = false; $("#eko").disabled = false;
+      } else if (st === "disconnected" || st === "failed") {
+        durum("Bağlantı koptu, yeniden deneniyor…", "hata");
+        setTimeout(yenidenBaglan, 1500);
+      }
+    });
+    call.on("close", function () { durum("TV bağlantıyı kapattı.", "hata"); });
+  });
+  peer.on("error", function (e) {
+    if (e.type === "peer-unavailable") durum("TV bulunamadı. TV'de Onur TV açık mı?", "hata");
+    else durum("Bağlantı hatası: " + e.type, "hata");
+  });
+}
+function yenidenBaglan() {
+  try { call && call.close(); peer && peer.destroy(); } catch (e) {}
+  baglan();
+}
+
+function seviyeCiz() {
+  var veri = new Uint8Array(analiz.fftSize), h = $("#halka");
+  (function dongu() {
+    analiz.getByteTimeDomainData(veri);
+    var t = 0; for (var i = 0; i < veri.length; i++) { var v = (veri[i] - 128) / 128; t += v * v; }
+    var rms = Math.sqrt(t / veri.length), s = Math.min(1, rms * 6);
+    h.style.opacity = susuk ? 0 : (0.25 + s * 0.75);
+    h.style.transform = "scale(" + (1 + s * 0.35) + ")";
+    requestAnimationFrame(dongu);
+  })();
+}
+
+function ekranUyanik() {
+  if (!("wakeLock" in navigator)) return;
+  navigator.wakeLock.request("screen").then(function (w) { uyanik = w; }).catch(function () {});
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") { navigator.wakeLock.request("screen").then(function (w) { uyanik = w; }).catch(function () {}); if (ctx && ctx.state === "suspended") ctx.resume(); }
+  });
+}
+</script>
+</body>
+</html>
