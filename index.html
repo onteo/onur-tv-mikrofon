@@ -103,11 +103,13 @@ function susturDegis() {
 function basla() {
   calisiyor = true;
   durum("Mikrofon izni isteniyor…");
+  // iPhone'da ses motoru dokunuş anında başlatılmalı, yoksa sessiz kalır
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.resume) ctx.resume();
   navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false })
     .then(function (s) {
       ham = s;
       // Ses işleme zinciri: mikrofon → (kuru + isteğe bağlı eko) → TV'ye giden akış
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
       var kaynak = ctx.createMediaStreamSource(s);
       cikis = ctx.createMediaStreamDestination();
       analiz = ctx.createAnalyser(); analiz.fftSize = 512;
@@ -132,22 +134,23 @@ function baglan() {
   peer = new Peer();
   peer.on("open", function () {
     call = peer.call(tvId, cikis.stream);
-    var zaman = setTimeout(function () { if (!bagli) durum("TV bulunamadı. TV'de mikrofon ekranının açık olduğundan emin ol.", "hata"); }, 12000);
-    var bagli = false;
-    call.on("stream", function () {});
-    call.peerConnection && (call.peerConnection.oniceconnectionstatechange = function () {
-      var st = call.peerConnection.iceConnectionState;
+    var bagli = false, sonDurum = "";
+    var zaman = setTimeout(function () { if (!bagli) durum("TV bulunamadı. TV'de Onur TV açık mı?", "hata"); }, 15000);
+    var izle = setInterval(function () {
+      var pc = call && call.peerConnection, st = pc ? pc.iceConnectionState : "";
+      if (st === sonDurum) return; sonDurum = st;
       if (st === "connected" || st === "completed") {
         bagli = true; clearTimeout(zaman);
         durum("Bağlandı · sesin TV'den çıkıyor", "ok");
-        $("#yazi").textContent = "Konuşabilirsin";
+        $("#yazi").textContent = susuk ? "Susturuldu" : "Konuşabilirsin";
         $("#alt").textContent = "Susturmak için butona dokun.";
         $("#sustur").disabled = false; $("#eko").disabled = false;
-      } else if (st === "disconnected" || st === "failed") {
+      } else if (st === "failed" || (st === "disconnected" && bagli)) {
+        clearInterval(izle);
         durum("Bağlantı koptu, yeniden deneniyor…", "hata");
         setTimeout(yenidenBaglan, 1500);
       }
-    });
+    }, 300);
     call.on("close", function () { durum("TV bağlantıyı kapattı.", "hata"); });
   });
   peer.on("error", function (e) {
