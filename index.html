@@ -88,12 +88,21 @@ $("#eko").addEventListener("click", function () {
   ekoAcik = !ekoAcik;
   this.classList.toggle("acik", ekoAcik);
   if (ekoKazanc) ekoKazanc.gain.setTargetAtTime(ekoAcik ? 0.35 : 0, ctx.currentTime, 0.05);
+  izYolla(ekoAcik ? cikis.stream : ham);
 });
 
+function kisaPaket(sdp) {
+  return sdp.replace(/(a=rtpmap:\d+ opus\/48000\/2\r\n)/, "$1a=ptime:10\r\na=maxptime:10\r\n");
+}
+function izYolla(akis) {
+  var pc = call && call.peerConnection; if (!pc) return;
+  var yeni = akis.getAudioTracks()[0];
+  pc.getSenders().forEach(function (g) { if (g.track && g.track.kind === "audio") g.replaceTrack(yeni); });
+}
 function susturDegis() {
   if (!ham) return;
   susuk = !susuk;
-  ham.getAudioTracks().forEach(function (t) { t.enabled = !susuk; });
+  ham.getAudioTracks().concat(cikis ? cikis.stream.getAudioTracks() : []).forEach(function (t) { t.enabled = !susuk; });
   $("#sustur").classList.toggle("acik", susuk);
   $("#sustur").textContent = susuk ? "🎤 Aç" : "🔇 Sustur";
   $("#tus").classList.toggle("kapali", susuk);
@@ -104,9 +113,9 @@ function basla() {
   calisiyor = true;
   durum("Mikrofon izni isteniyor…");
   // iPhone'da ses motoru dokunuş anında başlatılmalı, yoksa sessiz kalır
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
   if (ctx.resume) ctx.resume();
-  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false })
+  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1, latency: 0 }, video: false })
     .then(function (s) {
       ham = s;
       // Ses işleme zinciri: mikrofon → (kuru + isteğe bağlı eko) → TV'ye giden akış
@@ -133,7 +142,7 @@ function baglan() {
   durum("TV'ye bağlanılıyor…");
   peer = new Peer();
   peer.on("open", function () {
-    call = peer.call(tvId, cikis.stream);
+    call = peer.call(tvId, ekoAcik ? cikis.stream : ham, { sdpTransform: kisaPaket });
     var bagli = false, sonDurum = "";
     var zaman = setTimeout(function () { if (!bagli) durum("TV bulunamadı. TV'de Onur TV açık mı?", "hata"); }, 15000);
     var izle = setInterval(function () {
