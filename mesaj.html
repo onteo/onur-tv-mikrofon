@@ -36,6 +36,15 @@
     border-radius: 999px; padding: 9px 14px; }
   .hazir button:active { background: rgba(255,176,59,0.2); }
 
+  .zaman { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .zaman button { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: rgba(255,255,255,0.06);
+    border: 1.5px solid var(--line); border-radius: 12px; padding: 11px 6px; }
+  .zaman button.secili { border-color: var(--accent); background: rgba(255,176,59,0.16); color: #ffd28a; }
+  .ozel { display: none; align-items: center; gap: 10px; margin-top: 10px; }
+  .ozel.acik { display: flex; }
+  .ozel input { width: 110px; text-align: center; }
+  .ozel span { color: var(--muted); font-size: 15px; }
+  #geriSayim { margin-top: 12px; text-align: center; font-size: 15px; color: #ffd28a; font-weight: 600; min-height: 20px; font-variant-numeric: tabular-nums; }
   #gonder { width: 100%; margin-top: 22px; font: inherit; font-size: 19px; font-weight: 800; color: #fff; border: 0; border-radius: 18px;
     padding: 18px; background: linear-gradient(135deg, var(--accent), var(--pink)); box-shadow: 0 14px 40px rgba(255,77,109,.3); }
   #gonder:disabled { opacity: .5; }
@@ -80,7 +89,19 @@
   <label for="kimden">KİMDEN (İSTEĞE BAĞLI)</label>
   <input id="kimden" maxlength="30" placeholder="Örn: Onur">
 
+  <label>NE ZAMAN YAYINLANSIN?</label>
+  <div class="zaman" id="zaman">
+    <button data-sn="0" class="secili">⚡ Hemen</button>
+    <button data-sn="10">10 sn</button>
+    <button data-sn="30">30 sn</button>
+    <button data-sn="60">1 dk</button>
+    <button data-sn="300">5 dk</button>
+    <button data-sn="ozel">✏️ Özel</button>
+  </div>
+  <div class="ozel" id="ozel"><input id="ozelSn" type="number" inputmode="numeric" min="1" max="86400" placeholder="45"><span>saniye sonra</span></div>
+
   <button id="gonder">📺 TV'ye Gönder</button>
+  <div id="geriSayim"></div>
   <div id="durum"></div>
 
   <div class="onizleme">
@@ -135,6 +156,40 @@ function baglan() {
   });
 }
 
+// Yayın zamanı seçimi
+var gecikme = 0;
+Array.prototype.forEach.call(document.querySelectorAll("#zaman button"), function (b) {
+  b.addEventListener("click", function () {
+    Array.prototype.forEach.call(document.querySelectorAll("#zaman button"), function (x) { x.classList.remove("secili"); });
+    b.classList.add("secili");
+    var ozel = b.getAttribute("data-sn") === "ozel";
+    $("#ozel").classList.toggle("acik", ozel);
+    gecikme = ozel ? (parseInt($("#ozelSn").value, 10) || 0) : parseInt(b.getAttribute("data-sn"), 10);
+    $("#gonder").textContent = gecikme > 0 ? "⏱ " + sureYaz(gecikme) + " sonra yayınla" : "📺 TV'ye Gönder";
+    if (ozel) $("#ozelSn").focus();
+  });
+});
+$("#ozelSn").addEventListener("input", function () {
+  gecikme = Math.max(0, parseInt(this.value, 10) || 0);
+  $("#gonder").textContent = gecikme > 0 ? "⏱ " + sureYaz(gecikme) + " sonra yayınla" : "📺 TV'ye Gönder";
+});
+function sureYaz(sn) { return sn < 60 ? sn + " sn" : Math.floor(sn / 60) + " dk" + (sn % 60 ? " " + (sn % 60) + " sn" : ""); }
+var sayacZaman = null;
+function geriSay(sn, metin) {
+  clearInterval(sayacZaman);
+  var bitis = Date.now() + sn * 1000;
+  (function tik() {
+    var kalan = Math.ceil((bitis - Date.now()) / 1000);
+    if (kalan <= 0) { clearInterval(sayacZaman); $("#geriSayim").textContent = "📺 \"" + metin.slice(0, 40) + (metin.length > 40 ? "…" : "") + "\" şu an bantta!"; return; }
+    $("#geriSayim").textContent = "⏱ Yayına " + sureYaz(kalan) + " kaldı";
+  })();
+  sayacZaman = setInterval(function () {
+    var kalan = Math.ceil((bitis - Date.now()) / 1000);
+    if (kalan <= 0) { clearInterval(sayacZaman); $("#geriSayim").textContent = "📺 \"" + metin.slice(0, 40) + (metin.length > 40 ? "…" : "") + "\" şu an bantta!"; }
+    else $("#geriSayim").textContent = "⏱ Yayına " + sureYaz(kalan) + " kaldı";
+  }, 250);
+}
+
 $("#gonder").addEventListener("click", function () {
   var metin = $("#metin").value.trim();
   if (!metin) { durum("Önce bir mesaj yaz.", "hata"); $("#metin").focus(); return; }
@@ -142,11 +197,12 @@ $("#gonder").addEventListener("click", function () {
   durum("TV'ye gönderiliyor…");
   baglan().then(function (c) {
     var onay = new Promise(function (coz) { bekleyen = coz; setTimeout(function () { coz(null); }, 6000); });
-    c.send({ tip: "mesaj", metin: metin, kimden: $("#kimden").value.trim() });
+    c.send({ tip: "mesaj", metin: metin, kimden: $("#kimden").value.trim(), gecikme: gecikme });
     return onay;
   }).then(function (ok) {
     if (ok === true) {
-      durum("✅ Gönderildi, şu an TV'nin alt bandında!", "ok");
+      if (gecikme > 0) { durum("✅ TV'ye ulaştı, " + sureYaz(gecikme) + " sonra yayınlanacak", "ok"); geriSay(gecikme, metin); }
+      else { durum("✅ Gönderildi, şu an TV'nin alt bandında!", "ok"); $("#geriSayim").textContent = ""; }
       $("#metin").value = ""; onizle();
     } else {
       durum("TV mesajı onaylamadı, tekrar dene.", "hata");
