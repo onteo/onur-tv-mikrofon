@@ -52,6 +52,12 @@
   #durum.ok { color: var(--green); font-weight: 600; }
   #durum.hata { color: var(--pink); }
 
+  .yonet { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .yonet button { font: inherit; font-size: 15px; font-weight: 700; color: var(--text); background: rgba(255,255,255,0.06);
+    border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 8px; }
+  .yonet button.tehlike { color: #ffb3c0; border-color: rgba(255,77,109,0.45); background: rgba(255,77,109,0.1); }
+  .yonet button:disabled { opacity: .5; }
+  .bilgi { font-size: 13px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
   .onizleme { margin-top: 26px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #04070e; }
   .onizleme .ust { font-size: 12px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line); }
   .onizleme .serit { display: flex; align-items: center; height: 46px; }
@@ -104,6 +110,13 @@
   <div id="geriSayim"></div>
   <div id="durum"></div>
 
+  <label>BANDI YÖNET</label>
+  <div class="yonet">
+    <button id="geriAl">↩️ Son mesajı geri al</button>
+    <button id="temizle" class="tehlike">🧹 Bandı temizle</button>
+  </div>
+  <div class="bilgi">Mesajlar 30 dakika sonra kendiliğinden silinir; bantta en fazla 5 mesaj durur. "Bandı temizle" zamanlanmış mesajları da iptal eder ve bant eski haline (CANLI) döner.</div>
+
   <div class="onizleme">
     <div class="ust">TV'de böyle görünecek</div>
     <div class="serit"><div class="canli">SON DAKİKA</div><div class="metin" id="onizMetin"><em>SON DAKİKA</em>Mesajın burada görünecek</div></div>
@@ -114,7 +127,7 @@
 <script>
 var tvId = decodeURIComponent(location.hash.slice(1));
 var $ = function (s) { return document.querySelector(s); };
-var peer = null, conn = null, bekleyen = null;
+var peer = null, conn = null, bekleyen = null, temizBekleyen = null;
 
 function durum(t, cls) { var d = $("#durum"); d.textContent = t; d.className = cls || ""; }
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]; }); }
@@ -145,7 +158,10 @@ function baglan() {
     function ac() {
       conn = peer.connect(tvId, { reliable: true });
       conn.on("open", function () { clearTimeout(zaman); coz(conn); });
-      conn.on("data", function (d) { if (d && d.tip === "alindi" && bekleyen) { bekleyen(d.ok); bekleyen = null; } });
+      conn.on("data", function (d) {
+        if (d && d.tip === "alindi" && bekleyen) { bekleyen(d.ok); bekleyen = null; }
+        if (d && d.tip === "temizlendi" && temizBekleyen) { temizBekleyen(d.silinen); temizBekleyen = null; }
+      });
       conn.on("error", function () {});
     }
     peer.on("error", function (e) {
@@ -189,6 +205,28 @@ function geriSay(sn, metin) {
     else $("#geriSayim").textContent = "⏱ Yayına " + sureYaz(kalan) + " kaldı";
   }, 250);
 }
+
+function komut(tip, btn) {
+  btn.disabled = true;
+  durum(tip === "temizle" ? "Bant temizleniyor…" : "Son mesaj geri alınıyor…");
+  baglan().then(function (c) {
+    var onay = new Promise(function (coz) { temizBekleyen = coz; setTimeout(function () { coz(null); }, 6000); });
+    c.send({ tip: tip });
+    return onay;
+  }).then(function (n) {
+    if (n === null) durum("TV cevap vermedi, tekrar dene.", "hata");
+    else if (n === 0) durum("Bantta silinecek mesaj yok.", "");
+    else {
+      durum(tip === "temizle" ? "🧹 Bant temizlendi (" + n + " mesaj), TV eski haline döndü" : "↩️ Son mesaj banttan kaldırıldı", "ok");
+      clearInterval(sayacZaman); $("#geriSayim").textContent = "";
+    }
+  }).catch(function (e) { conn = null; durum(e.message, "hata"); })
+    .then(function () { btn.disabled = false; });
+}
+$("#geriAl").addEventListener("click", function () { komut("geriAl", this); });
+$("#temizle").addEventListener("click", function () {
+  if (confirm("Banttaki tüm son dakika mesajları ve zamanlanmış mesajlar silinsin mi?")) komut("temizle", this);
+});
 
 $("#gonder").addEventListener("click", function () {
   var metin = $("#metin").value.trim();
