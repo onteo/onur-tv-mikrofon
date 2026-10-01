@@ -45,6 +45,12 @@
   .ozel input { width: 110px; text-align: center; }
   .ozel span { color: var(--muted); font-size: 15px; }
   #geriSayim { margin-top: 12px; text-align: center; font-size: 15px; color: #ffd28a; font-weight: 600; min-height: 20px; font-variant-numeric: tabular-nums; }
+  .anahtar { display: flex; align-items: center; gap: 12px; margin: 20px 0 0; font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: 0; cursor: pointer; }
+  .anahtar input { display: none; }
+  .anahtar .kol { width: 50px; height: 30px; border-radius: 999px; background: rgba(255,255,255,0.15); position: relative; transition: background .2s; flex: none; }
+  .anahtar .kol::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .anahtar input:checked + .kol { background: linear-gradient(135deg, var(--accent), var(--pink)); }
+  .anahtar input:checked + .kol::after { transform: translateX(20px); }
   #gonder { width: 100%; margin-top: 22px; font: inherit; font-size: 19px; font-weight: 800; color: #fff; border: 0; border-radius: 18px;
     padding: 18px; background: linear-gradient(135deg, var(--accent), var(--pink)); box-shadow: 0 14px 40px rgba(255,77,109,.3); }
   #gonder:disabled { opacity: .5; }
@@ -106,6 +112,8 @@
   </div>
   <div class="ozel" id="ozel"><input id="ozelSn" type="number" inputmode="numeric" min="1" max="86400" placeholder="45"><span>saniye sonra</span></div>
 
+  <label class="anahtar"><input type="checkbox" id="muzik" checked><span class="kol"></span><span>🎵 Son dakika müziği çalsın</span></label>
+
   <button id="gonder">📺 TV'ye Gönder</button>
   <div id="geriSayim"></div>
   <div id="durum"></div>
@@ -139,6 +147,8 @@ function onizle() {
 $("#metin").addEventListener("input", onizle);
 $("#kimden").addEventListener("input", function () { try { localStorage.setItem("kimden", this.value); } catch (e) {} onizle(); });
 try { $("#kimden").value = localStorage.getItem("kimden") || ""; } catch (e) {}
+try { if (localStorage.getItem("muzik") === "0") $("#muzik").checked = false; } catch (e) {}
+$("#muzik").addEventListener("change", function () { try { localStorage.setItem("muzik", this.checked ? "1" : "0"); } catch (e) {} });
 Array.prototype.forEach.call(document.querySelectorAll(".hazir button"), function (b) {
   b.addEventListener("click", function () { $("#metin").value = b.getAttribute("data-m"); onizle(); });
 });
@@ -146,31 +156,33 @@ onizle();
 
 if (!tvId) { durum("Bu sayfayı TV'deki QR kodu okutarak aç.", "hata"); $("#gonder").disabled = true; }
 
-// TV'ye kalıcı bir veri bağlantısı aç; koparsa gönderirken yeniden açılır
+// Her gönderim için TV'ye taze bir veri bağlantısı aç (açık bekleyen eski bağlantı sessizce kopabiliyor)
 function baglan() {
   return new Promise(function (coz, red) {
-    if (conn && conn.open) return coz(conn);
+    try { conn && conn.close(); } catch (e) {}
+    conn = null;
     if (!peer || peer.destroyed || peer.disconnected) {
       try { peer && peer.destroy(); } catch (e) {}
       peer = new Peer();
+      peer.on("error", function (e) { if (sonRed) sonRed(new Error(e.type === "peer-unavailable" ? "TV bulunamadı. TV'de Onur TV açık mı?" : "Bağlantı hatası: " + e.type)); });
     }
-    var zaman = setTimeout(function () { red(new Error("TV bulunamadı. TV'de Onur TV açık mı?")); }, 12000);
+    var bitti = false;
+    sonRed = function (h) { if (!bitti) { bitti = true; clearTimeout(zaman); red(h); } };
+    var zaman = setTimeout(function () { sonRed(new Error("TV bulunamadı. TV'de Onur TV açık mı?")); }, 12000);
     function ac() {
-      conn = peer.connect(tvId, { reliable: true });
-      conn.on("open", function () { clearTimeout(zaman); coz(conn); });
-      conn.on("data", function (d) {
+      var c = peer.connect(tvId, { reliable: true });
+      conn = c;
+      c.on("open", function () { if (!bitti) { bitti = true; clearTimeout(zaman); coz(c); } });
+      c.on("data", function (d) {
         if (d && d.tip === "alindi" && bekleyen) { bekleyen(d.ok); bekleyen = null; }
         if (d && d.tip === "temizlendi" && temizBekleyen) { temizBekleyen(d.silinen); temizBekleyen = null; }
       });
-      conn.on("error", function () {});
+      c.on("error", function () {});
     }
-    peer.on("error", function (e) {
-      clearTimeout(zaman);
-      red(new Error(e.type === "peer-unavailable" ? "TV bulunamadı. TV'de Onur TV açık mı?" : "Bağlantı hatası: " + e.type));
-    });
-    if (peer.open) ac(); else peer.on("open", ac);
+    if (peer.open) ac(); else peer.once ? peer.once("open", ac) : peer.on("open", ac);
   });
 }
+var sonRed = null;
 
 // Yayın zamanı seçimi
 var gecikme = 0;
@@ -235,7 +247,7 @@ $("#gonder").addEventListener("click", function () {
   durum("TV'ye gönderiliyor…");
   baglan().then(function (c) {
     var onay = new Promise(function (coz) { bekleyen = coz; setTimeout(function () { coz(null); }, 6000); });
-    c.send({ tip: "mesaj", metin: metin, kimden: $("#kimden").value.trim(), gecikme: gecikme });
+    c.send({ tip: "mesaj", metin: metin, kimden: $("#kimden").value.trim(), gecikme: gecikme, ses: $("#muzik").checked });
     return onay;
   }).then(function (ok) {
     if (ok === true) {
